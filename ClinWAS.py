@@ -4,13 +4,12 @@ import numpy as np
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
 import time
-import sys
-import argparse
 
 def test_all(
     df,
     disc_cols=None,
     cont_cols=None,
+    remove_lists=None,
     infer_type=False,
     output_dir="ClinWAS_output",
     output_type="separate",
@@ -42,6 +41,8 @@ def test_all(
         A list of column names that will be treated as discrete variables
     cont_cols: list-like
         A list of column names that will be treated as continuous variables
+    remove_lists: list-like
+        A list of list where every list is a group of variables that will not be tested against each other
     output_dir: str
         The name of the directory to write the output files
     output_type: str
@@ -84,10 +85,16 @@ def test_all(
         assert disc_cols != None
         assert cont_cols != None
 
-    print(f"{len(disc_cols)} Discrete Columns detected: {disc_cols}")
-    print(f"{len(cont_cols)} Continuous Columns detected: {cont_cols}")
-    print(f"Total number of rows: {len(df)}, columns: {len(df.columns)}, entries: {len(df)*len(df.columns)}")
+    print(f"{len(disc_cols)} Discrete Columns detected: {disc_cols}\n")
+    print(f"{len(cont_cols)} Continuous Columns detected: {cont_cols}\n")
+    if remove_lists:
+        print(f"These columns will not be tested against each other:")
+        for list in remove_lists:
+            print(list)
+    else:
+        print(f"These columns will not be tested against each other: None provided. All columns will be tested against each other.")
     print()
+    print(f"Total number of rows: {len(df)}, columns: {len(df.columns)}, entries: {len(df)*len(df.columns)}\n")
 
     cont_cont_start_time = time.time()
     print("Performing continuous to continuous testing...")
@@ -95,6 +102,7 @@ def test_all(
     cont_to_cont_test_df = cont_to_cont(
         df,
         cont_cols,
+        remove_lists=remove_lists,
         test_method=cont_cont_test_method,
         drop_duplicates=cont_cont_drop_duplicates,
         min_periods=cont_cont_min_periods,
@@ -112,6 +120,7 @@ def test_all(
     disc_to_disc_test_df = disc_to_disc(
         df,
         disc_cols,
+        remove_lists=remove_lists,
         test_method=disc_disc_test_method,
         drop_duplicates=disc_disc_drop_duplicates,
         correction_method=correction_method,
@@ -129,6 +138,7 @@ def test_all(
         df,
         cont_cols,
         disc_cols,
+        remove_lists=remove_lists,
         small_group_action=cont_disc_small_group_action,
         small_group_threshold=cont_disc_small_group_threshold,
         small_group_threshold_prop=cont_disc_small_group_threshold_prop,
@@ -170,6 +180,7 @@ def cont_to_disc(
     df,
     cont_cols,
     disc_cols,
+    remove_lists=None,
     small_group_action="exclude",
     small_group_threshold=5,
     small_group_threshold_prop=0.01,
@@ -192,6 +203,8 @@ def cont_to_disc(
         Names of the continuous (numerical) columns in which the relationships will be investigated
     disc_cols: list-like
         Names of the discrete columns in which the relationships will be investigated
+    remove_lists: list-like
+        A list of list where every list is a group of variables that will not be tested against each other
     small_group_action: String
         What to do when one of the groups has number of observations less than the specified number.
         Currently the only supported solution is to exclude but other solutions may be implemented in the future. 
@@ -317,6 +330,10 @@ def cont_to_disc(
     
     cont_to_disc_test_df = pd.DataFrame(columns=cont_to_disc_test_df_columns,data=cont_to_disc_test_df_rows)
 
+    # Remove tests that are specified to be removed
+    if remove_lists:
+        cont_to_disc_test_df = remove_tests(cont_to_disc_test_df,remove_lists)
+
     # Applying multiple hypothesis testing corrections
     _,corrected_pvals,_,_ = multipletests(cont_to_disc_test_df["test_pval"].to_numpy(),alpha=correction_alpha,method=correction_method)
     cont_to_disc_test_df["test_pval_corrected"] = corrected_pvals
@@ -329,6 +346,7 @@ def cont_to_disc(
 def disc_to_disc(
     df,
     disc_cols,
+    remove_lists=None,
     test_method="chi2",
     correction_method="fdr_bh",
     correction_alpha=0.05,
@@ -344,6 +362,8 @@ def disc_to_disc(
         The dataframe in which the discrete columns will be derived from
     disc_cols: list-like
         Names of the discrete columns in which the relationships will be investigated
+    remove_lists: list-like
+        A list of list where every list is a group of variables that will not be tested against each other
     test_method: String
         Name of the statistical test to use. Currently only supports "chi2" for chi-sqaured test.
         Other tests and custom functions will be implemented in the future
@@ -383,17 +403,22 @@ def disc_to_disc(
     
     disc_to_disc_test_df = pd.DataFrame(columns=disc_to_disc_test_df_columns,data=disc_to_disc_test_df_rows)
 
-    disc_to_disc_test_df = disc_to_disc_test_df.sort_values(by="test_pval")
+    # Remove tests that are specified to be removed
+    if remove_lists:
+        disc_to_disc_test_df = remove_tests(disc_to_disc_test_df,remove_lists)
 
     # Applying multiple hypothesis testing corrections
     _,corrected_pvals,_,_ = multipletests(disc_to_disc_test_df["test_pval"].to_numpy(),alpha=correction_alpha,method=correction_method)
     disc_to_disc_test_df["test_pval_corrected"] = corrected_pvals
+
+    disc_to_disc_test_df = disc_to_disc_test_df.sort_values(by="test_pval")
 
     return disc_to_disc_test_df
 
 def cont_to_cont(
     df,
     cont_cols,
+    remove_lists=None,
     test_method="spearman",
     drop_duplicates=True,
     correction_method="fdr_bh",
@@ -411,6 +436,8 @@ def cont_to_cont(
         The dataframe in which the discrete columns will be derived from
     cont_cols: list-like
         Names of the continuous (numerical) columns in which the relationships will be investigated
+    remove_lists: list-like
+        A list of list where every list is a group of variables that will not be tested against each other
     test_method: String
         Name of the statistical test to use. Currently supports "pearson", "kendall", or "spearman".
         Other tests and custom functions will be implemented in the future. Defaults to spearman
@@ -458,6 +485,10 @@ def cont_to_cont(
                 cont_to_cont_test_rows.append([var_2,var_1,test_method,corr_num,corr_pval])
     
     cont_to_cont_test_df = pd.DataFrame(columns=cont_to_cont_test_columns,data=cont_to_cont_test_rows)
+
+    # Remove tests that are specified to be removed
+    if remove_lists:
+        cont_to_cont_test_df = remove_tests(cont_to_cont_test_df,remove_lists)
 
     # Applying multiple hypothesis testing corrections
     _,corrected_pvals,_,_ = multipletests(cont_to_cont_test_df["test_pval"].to_numpy(),alpha=correction_alpha,method=correction_method)
@@ -508,3 +539,63 @@ def combine_test_results(
 
     test_combined_df = test_combined_df.sort_values(by="test_pval")
     return test_combined_df
+
+def remove_tests(
+    test_df,
+    remove_lists
+    ):
+    '''
+    Given the dataframe containing tests between variables, and a list of list of variables, remove tests that appear in any of the same list
+
+    Params:
+    -------
+    remove_lists: list
+        A list of lists of variables. Where every list is a group of variables in which no two pairs from the list will be tested
+
+    Returns:
+    -------
+    removed_df: pandas dataframe
+        A dataframe with the specified pairs of variables removed
+    '''
+
+    remove_dict = generate_omit_pairs(remove_lists)
+    #print(remove_dict)
+    remove_indices = []
+    for idx,row in test_df.iterrows():
+        var_1 = row[0]
+        var_2 = row[1]
+        if var_1 in remove_dict and var_2 in remove_dict[var_1]:
+            remove_indices.append(idx)
+
+    removed_df = test_df.drop(index=remove_indices)
+    return removed_df
+
+def generate_omit_pairs(remove_lists):
+    '''
+    Given a list of list containing variables whihc will not be tested against each other, return a dictionary such that
+    the keys correspond to variables and values correpsond to the set of variables in whcih the key will not be tested against
+
+    Params:
+    -------
+    remove_lists: list
+        A list of lists of variables. Where every list is a group of variables in which no two pairs from the list will be tested
+
+    Returns:
+    -------
+    omit_dict:
+        Dictionary where the keys are the given variables, and every key's corresponding value is a set of variables which the variable will not be tested against
+    '''
+
+    assert len(remove_lists) > 0, "The given list must have length greater than 0"
+
+    omit_dict = {}
+    for cur_list in remove_lists:
+        assert isinstance(cur_list,list), "A non-list element is encountered. Make sure the input to remove_list is a list of list, not a flat list."
+        cur_dict = {var:set(cur_list) for var in cur_list}
+        for var in cur_dict:
+            if var in omit_dict:
+                omit_dict[var] = omit_dict[var].union(cur_dict[var])
+            else:
+                omit_dict[var] = cur_dict[var]
+
+    return omit_dict
