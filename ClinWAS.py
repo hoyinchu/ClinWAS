@@ -84,6 +84,8 @@ def test_all(
     elif infer_type == False:
         assert disc_cols != None
         assert cont_cols != None
+    
+    assert output_type == "combined" or output_type == "separate", "Invalid output_type, must be one of 'combined' or 'separate'"
 
     print(f"{len(disc_cols)} Discrete Columns detected: {disc_cols}\n")
     print(f"{len(cont_cols)} Continuous Columns detected: {cont_cols}\n")
@@ -330,6 +332,9 @@ def cont_to_disc(
     
     cont_to_disc_test_df = pd.DataFrame(columns=cont_to_disc_test_df_columns,data=cont_to_disc_test_df_rows)
 
+    # Remove tests that results in nan p-values (test was invalid due to insufficient groups)
+    cont_to_disc_test_df = cont_to_disc_test_df.dropna(subset=["test_pval"])
+
     # Remove tests that are specified to be removed
     if remove_lists:
         cont_to_disc_test_df = remove_tests(cont_to_disc_test_df,remove_lists)
@@ -535,7 +540,6 @@ def combine_test_results(
     # Discard original corrected p-values and re-correct
     _,corrected_pvals,_,_ = multipletests(test_combined_df["test_pval"].to_numpy(),alpha=correction_alpha,method=correction_method)
     test_combined_df["test_pval_corrected"] = corrected_pvals
-    print(corrected_pvals)
 
     test_combined_df = test_combined_df.sort_values(by="test_pval")
     return test_combined_df
@@ -559,7 +563,6 @@ def remove_tests(
     '''
 
     remove_dict = generate_omit_pairs(remove_lists)
-    #print(remove_dict)
     remove_indices = []
     for idx,row in test_df.iterrows():
         var_1 = row[0]
