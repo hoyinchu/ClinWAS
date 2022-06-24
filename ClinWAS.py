@@ -12,7 +12,7 @@ def test_all(
     remove_lists=None,
     infer_type=False,
     output_dir="ClinWAS_output",
-    output_type="separate",
+    output_type="combined",
     cont_cont_test_method="spearman",
     cont_cont_min_periods=1,
     cont_cont_drop_duplicates=True,
@@ -98,40 +98,46 @@ def test_all(
     print()
     print(f"Total number of rows: {len(df)}, columns: {len(df.columns)}, entries: {len(df)*len(df.columns)}\n")
 
-    cont_cont_start_time = time.time()
-    print("Performing continuous to continuous testing...")
-    # Do continuous to continuous testing?
-    cont_to_cont_test_df = cont_to_cont(
-        df,
-        cont_cols,
-        remove_lists=remove_lists,
-        test_method=cont_cont_test_method,
-        drop_duplicates=cont_cont_drop_duplicates,
-        min_periods=cont_cont_min_periods,
-        correction_method=correction_method,
-        correction_alpha=correction_alpha
-        )
-    #print(f"Continuous to continuous testing done. Writing to {output_dir}/cont_to_cont.tsv")
-    print(f"Continuous to continuous testing done")
-    print(f"Runtime: {time.time()-cont_cont_start_time}s")
-    print()
+    cont_to_cont_test_df = None
+    disc_to_disc_test_df = None
+    cont_to_disc_test_df = None
 
-    disc_disc_start_time = time.time()
-    print("Performing Discrete to Discrete testing...")
-    # Do discrete to discrete testing
-    disc_to_disc_test_df = disc_to_disc(
-        df,
-        disc_cols,
-        remove_lists=remove_lists,
-        test_method=disc_disc_test_method,
-        drop_duplicates=disc_disc_drop_duplicates,
-        correction_method=correction_method,
-        correction_alpha=correction_alpha
-        )
-    #print(f"Discrete to discrete testing done. Writing to {output_dir}/disc_to_disc.tsv")
-    print(f"Discrete to discrete testing done.")
-    print(f"Runtime: {time.time()-disc_disc_start_time}s")
-    print()
+    if len(cont_cols) > 1:
+        cont_cont_start_time = time.time()
+        print("Performing continuous to continuous testing...")
+        # Do continuous to continuous testing?
+        cont_to_cont_test_df = cont_to_cont(
+            df,
+            cont_cols,
+            remove_lists=remove_lists,
+            test_method=cont_cont_test_method,
+            drop_duplicates=cont_cont_drop_duplicates,
+            min_periods=cont_cont_min_periods,
+            correction_method=correction_method,
+            correction_alpha=correction_alpha
+            )
+        #print(f"Continuous to continuous testing done. Writing to {output_dir}/cont_to_cont.tsv")
+        print(f"Continuous to continuous testing done")
+        print(f"Runtime: {time.time()-cont_cont_start_time}s")
+        print()
+
+    if len(disc_cols) > 1:
+        disc_disc_start_time = time.time()
+        print("Performing Discrete to Discrete testing...")
+        # Do discrete to discrete testing
+        disc_to_disc_test_df = disc_to_disc(
+            df,
+            disc_cols,
+            remove_lists=remove_lists,
+            test_method=disc_disc_test_method,
+            drop_duplicates=disc_disc_drop_duplicates,
+            correction_method=correction_method,
+            correction_alpha=correction_alpha
+            )
+        #print(f"Discrete to discrete testing done. Writing to {output_dir}/disc_to_disc.tsv")
+        print(f"Discrete to discrete testing done.")
+        print(f"Runtime: {time.time()-disc_disc_start_time}s")
+        print()
     
     cont_disc_run_time = time.time()
     # Do continuous to discrete testing 
@@ -239,7 +245,7 @@ def cont_to_disc(
     if small_group_threshold_prop:
         assert 0 <= small_group_threshold_prop and small_group_threshold_prop <= 1
 
-    cont_to_disc_test_df_columns = ["Distribution","ConditionalVariable","test_method","groups_compared","group_means","max_mean_diff","test_pval"]
+    cont_to_disc_test_df_columns = ["Distribution","ConditionalVariable","test_method","groups_compared","group_stats","max_mean_diff","test_pval"]
     cont_to_disc_test_df_rows = []
 
     group_dict = {}
@@ -309,11 +315,18 @@ def cont_to_disc(
             # We can collect other statistics. For now only the maximum difference between means are collected
 
             groups_compared = group_dict[cont_col][disc_col]
-            group_means = {}
+            #group_means = {}
 
             if len(groups_compared) > 0:
-                group_means = {key:np.nanmean(groups_compared[key]) for key in groups_compared}
-                max_group_mean_diff = np.max(list(group_means.values())) - np.min(list(group_means.values()))
+                group_stats = {}
+                for key in groups_compared:
+                    group_stats[key] = {
+                        "mean": np.nanmean(groups_compared[key]),
+                        "std": np.nanstd(groups_compared[key])
+                    }
+                    max_group_mean_diff = np.NaN
+                #group_means = {key:np.nanmean(groups_compared[key]) for key in groups_compared}
+                #max_group_mean_diff = np.max(list(group_means.values())) - np.min(list(group_means.values()))
             
             # Perform Kruskal-Wallis Test to test if any distributions are different
             if len(groups_compared) > 1:
@@ -328,7 +341,7 @@ def cont_to_disc(
                 test_pval = np.NaN
                 max_group_mean_diff = np.NaN
 
-            cont_to_disc_test_df_rows.append([cont_col,disc_col,test_method,len(groups_compared),str(group_means),max_group_mean_diff,test_pval])
+            cont_to_disc_test_df_rows.append([cont_col,disc_col,test_method,len(groups_compared),str(group_stats),max_group_mean_diff,test_pval])
     
     cont_to_disc_test_df = pd.DataFrame(columns=cont_to_disc_test_df_columns,data=cont_to_disc_test_df_rows)
 
@@ -388,7 +401,10 @@ def disc_to_disc(
     # TODO: Highly correlated / hieraichal columns
     # TODO: Assert disc_col in df.columns
 
-    disc_to_disc_test_df_columns = ["variable_1","variable_2","test_method","dof","test_pval"]
+    if len(disc_cols) <= 1:
+        raise Exception("Can't test discrete variables when less than 2 discrete variables are provided")
+
+    disc_to_disc_test_df_columns = ["variable_1","variable_2","test_method","dof","group_stats","test_pval"]
     disc_to_disc_test_df_rows = []
     done_disc_col = set() # Avoid going over the same columns
 
@@ -400,11 +416,12 @@ def disc_to_disc(
                     # Make a contingency table using pandas' built in crosstab function
                     crosstab_df = pd.crosstab(df[main_disc_col],df[sub_disc_col]) # This line definitely needs some tests for errors
                     _,chi2_pval,chi2_dof,_ = stats.chi2_contingency(crosstab_df)
-                    
+                    group_stats = crosstab_df.T.add_suffixto_dict()
                     # Chi-square is bidirectional so the statistics are the same both ways
-                    disc_to_disc_test_df_rows.append([sub_disc_col,main_disc_col,test_method,chi2_dof,chi2_pval])
+                    disc_to_disc_test_df_rows.append([sub_disc_col,main_disc_col,test_method,chi2_dof,str(group_stats),chi2_pval])
+
                     if not drop_duplicates:
-                        disc_to_disc_test_df_rows.append([main_disc_col,sub_disc_col,test_method,chi2_dof,chi2_pval])
+                        disc_to_disc_test_df_rows.append([main_disc_col,sub_disc_col,test_method,chi2_dof,str(group_stats),chi2_pval])
     
     disc_to_disc_test_df = pd.DataFrame(columns=disc_to_disc_test_df_columns,data=disc_to_disc_test_df_rows)
 
@@ -461,6 +478,9 @@ def cont_to_cont(
     # TODO: keep only 95% Interval?
     # TODO: small group?
     # TODO: Correlation upperbound
+
+    if len(cont_cols) <= 1:
+        raise Exception("Can't test continuous variables when less than 2 continuous variables are provided")
 
     cont_to_cont_test_columns = ["variable_1","variable_2","test_method","correlation","test_pval"]
     cont_to_cont_test_rows = []
@@ -529,13 +549,24 @@ def combine_test_results(
         The combined dataframe containing outputs from all the tests
     '''
 
-    cont_cont_df_copy = cont_cont_df.copy()
-    cont_cont_df_copy["test_type"] = "cont_cont"
-    disc_disc_df_copy = disc_disc_df.copy()
-    disc_disc_df_copy["test_type"] = "disc_disc"
-    cont_disc_renamed = cont_disc_df.rename(columns={"Distribution":"variable_1","ConditionalVariable":"variable_2"})
-    cont_disc_renamed["test_type"] = "cont_disc"
-    test_combined_df = pd.concat([cont_cont_df_copy,disc_disc_df_copy,cont_disc_renamed],ignore_index=True)
+    to_combine = []
+
+    if cont_cont_df is not None:
+        cont_cont_df_copy = cont_cont_df.copy()
+        cont_cont_df_copy["test_type"] = "cont_cont"
+        to_combine.append(cont_cont_df_copy)
+
+    if disc_disc_df is not None:
+        disc_disc_df_copy = disc_disc_df.copy()
+        disc_disc_df_copy["test_type"] = "disc_disc"
+        to_combine.append(disc_disc_df_copy)
+
+    if cont_disc_df is not None:
+        cont_disc_renamed = cont_disc_df.rename(columns={"Distribution":"variable_1","ConditionalVariable":"variable_2"})
+        cont_disc_renamed["test_type"] = "cont_disc"
+        to_combine.append(cont_disc_renamed)
+
+    test_combined_df = pd.concat(to_combine,ignore_index=True)
 
     # Discard original corrected p-values and re-correct
     _,corrected_pvals,_,_ = multipletests(test_combined_df["test_pval"].to_numpy(),alpha=correction_alpha,method=correction_method)
