@@ -196,14 +196,23 @@ def viz_cont_disc_row(data,var1,var2,group_stats):
     sns.set_style(style="white")
     include = group_stats.keys()
     df_to_plot = data[data[var2].isin(include)]
-    ax = sns.displot(data=df_to_plot,x=var1,hue=var2,kind="kde",common_norm=True)
+    ax = sns.displot(
+        data=df_to_plot,
+        x=var1,
+        hue=var2,
+        kde=True,
+        common_norm=True
+    )
     
     group_stats_df = pd.DataFrame(group_stats)
     group_stats_df = group_stats_df.round(3)
+
+    table_row_labels = [f"{var1}:{label}" for label in  group_stats_df.index]
+    table_row_columns = [f"{var2}:{label}" for label in  group_stats_df.columns]
     
     table_plot = plt.table(cellText=group_stats_df.to_numpy(),
-                   rowLabels=group_stats_df.index,
-                   colLabels=group_stats_df.columns,
+                   rowLabels=table_row_labels,
+                   colLabels=table_row_columns,
                    transform=plt.gcf().transFigure,
                   )
     
