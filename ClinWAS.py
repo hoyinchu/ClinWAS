@@ -415,13 +415,14 @@ def disc_to_disc(
                 if test_method=="chi2":
                     # Make a contingency table using pandas' built in crosstab function
                     crosstab_df = pd.crosstab(df[main_disc_col],df[sub_disc_col]) # This line definitely needs some tests for errors
-                    _,chi2_pval,chi2_dof,_ = stats.chi2_contingency(crosstab_df)
-                    group_stats = crosstab_df.T.to_dict()
-                    # Chi-square is bidirectional so the statistics are the same both ways
-                    disc_to_disc_test_df_rows.append([sub_disc_col,main_disc_col,test_method,chi2_dof,str(group_stats),chi2_pval])
+                    if np.asarray(crosstab_df).size > 0:
+                        _,chi2_pval,chi2_dof,_ = stats.chi2_contingency(crosstab_df)
+                        group_stats = crosstab_df.T.to_dict()
+                        # Chi-square is bidirectional so the statistics are the same both ways
+                        disc_to_disc_test_df_rows.append([sub_disc_col,main_disc_col,test_method,chi2_dof,str(group_stats),chi2_pval])
 
-                    if not drop_duplicates:
-                        disc_to_disc_test_df_rows.append([main_disc_col,sub_disc_col,test_method,chi2_dof,str(group_stats),chi2_pval])
+                        if not drop_duplicates:
+                            disc_to_disc_test_df_rows.append([main_disc_col,sub_disc_col,test_method,chi2_dof,str(group_stats),chi2_pval])
     
     disc_to_disc_test_df = pd.DataFrame(columns=disc_to_disc_test_df_columns,data=disc_to_disc_test_df_rows)
 
