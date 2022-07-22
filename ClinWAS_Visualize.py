@@ -74,7 +74,7 @@ class PDF(FPDF):
         test_method=None,
         correlation=None        
     ):
-        
+        print("Adding fig page")
         self.add_page()
         const = self.get_const()
         
@@ -135,6 +135,8 @@ class PDF(FPDF):
             if not np.isnan(correlation):
                 correlation_text = f"Correlation coefficient: {correlation}"
                 self.cell(const["figpage"]["cell_width"],const["figpage"]["cell_height"],txt=correlation_text,ln=1,align='L')
+
+        print("Done adding fig page")
         
 
 
@@ -152,7 +154,7 @@ def viz_sig_relations(data_df,relation_df,output_dir="clinwas_visualized",pval=0
     pdf.alias_nb_pages()
     
     for idx,row in df_to_plot.iterrows():
-        print(f"Visualizating relation {idx+1}/{len(df_to_plot)}: {row['variable_1']}|{row['variable_2']}")
+        print(f"Visualizing relation {idx+1}/{len(df_to_plot)}: {row['variable_1']}|{row['variable_2']}")
         rel_fig = viz_relation(data_df,row)
         fig_path = f"{output_dir}/{idx}|{row['variable_1']}|{row['variable_2']}.png"
         rel_fig.figure.savefig(fig_path,dpi=200,bbox_inches='tight')
